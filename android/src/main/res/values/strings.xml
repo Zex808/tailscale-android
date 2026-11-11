@@ -342,6 +342,16 @@
     <string name="multiple_vpn_explainer">Only one VPN can be active, and it appears another is already running. Before starting Tailscale, disable the other VPN.</string>
     <string name="go_to_settings">Go to Settings</string>
     <string name="subnet_routes">Subnet routes</string>
+    <string name="device_groups">Device groups</string>
+    <string name="device_groups_header">Groups are only visible on this device.</string>
+    <string name="no_device_groups">No groups yet</string>
+    <string name="new_device_group">New group</string>
+    <string name="device_group_name">Group name</string>
+    <string name="device_group_name_invalid">Enter a unique name</string>
+    <string name="create">Create</string>
+    <string name="delete_device_group">Delete group</string>
+    <string name="device_group_member_count">%d devices</string>
+    <string name="device_group_members">Members of %s</string>
     <string name="run_as_subnet_router_header">Advertise routes to machines that are not running Tailscale to make them available in your tailnet. Routes must be approved in the admin console.</string>
     <string name="open_kb_article">Open KB Article</string>
     <string name="delete_route">Delete route</string>

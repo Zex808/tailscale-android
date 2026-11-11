@@ -113,6 +113,8 @@ fun SettingsView(
             Lists.ItemDivider()
             Setting.Text(R.string.subnet_routing, onClick = settingsNav.onNavigateToSubnetRouting)
           }
+          Lists.ItemDivider()
+          Setting.Text(R.string.device_groups, onClick = settingsNav.onNavigateToDeviceGroups)
 
           Lists.ItemDivider()
           Setting.Switch(
@@ -278,5 +280,5 @@ fun SettingsPreview() {
   vm.tailNetLockEnabled.set(true)
   vm.isAdmin.set(true)
   vm.managedByOrganization.set("Tails and Scales Inc.")
-  SettingsView(SettingsNav({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}), vm)
+  SettingsView(SettingsNav({}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}, {}), vm)
 }

@@ -5,11 +5,17 @@ package com.tailscale.ipn.ui.util
 
 // Local, user-defined groupings of peers (e.g. "Office", "Mobile"). Peers are keyed by
 // StableID so a group survives netmap updates that reorder or re-id nodes.
-class DeviceGroups {
-  private val membersByGroup = linkedMapOf<String, MutableSet<String>>()
+class DeviceGroups(initial: Map<String, Set<String>> = emptyMap()) {
+  private val membersByGroup =
+      linkedMapOf<String, MutableSet<String>>().apply {
+        initial.forEach { (name, members) -> put(name, members.toMutableSet()) }
+      }
 
   val names: List<String>
     get() = membersByGroup.keys.toList()
+
+  val snapshot: Map<String, Set<String>>
+    get() = membersByGroup.mapValues { it.value.toSet() }
 
   fun create(name: String): Boolean {
     val trimmed = name.trim()
