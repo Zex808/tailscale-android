@@ -561,6 +561,8 @@ fun PeerList(
   var isListFocussed by remember { mutableStateOf(false) }
   val expandedPeer = viewModel.expandedMenuPeer.collectAsState()
   val localClipboardManager = LocalClipboardManager.current
+  val groupMembers by viewModel.groupMembers.collectAsState(initial = emptyMap())
+  val selectedGroup by viewModel.selectedGroup.collectAsState(initial = null)
   // Restrict search to devices running API 33+ (see https://github.com/tailscale/corp/issues/27375)
   val enableSearch = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
   Column(modifier = Modifier.fillMaxSize()) {
@@ -574,7 +576,7 @@ fun PeerList(
               OutlinedTextField(
                   modifier =
                       Modifier.fillMaxWidth()
-                          .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 0.dp)
+                          .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 8.dp)
                           .onFocusChanged { isSearchFocussed = it.isFocused },
                   singleLine = true,
                   shape = MaterialTheme.shapes.extraLarge,
@@ -608,6 +610,30 @@ fun PeerList(
                   onValueChange = { onSearch(it) })
             }
       }
+    }
+    // Group filter chips
+    if (groupMembers.isNotEmpty()) {
+      androidx.compose.foundation.lazy.LazyRow(
+          modifier =
+              Modifier.fillMaxWidth()
+                  .background(color = MaterialTheme.colorScheme.surface)
+                  .padding(horizontal = 8.dp, vertical = 8.dp),
+          horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            item {
+              androidx.compose.material3.FilterChip(
+                  selected = selectedGroup == null,
+                  onClick = { viewModel.setSelectedGroup(null) },
+                  label = { Text(stringResource(R.string.all)) })
+            }
+            val groupList = groupMembers.keys.toList()
+            items(groupList.size) { idx ->
+              val groupName = groupList[idx]
+              androidx.compose.material3.FilterChip(
+                  selected = selectedGroup == groupName,
+                  onClick = { viewModel.setSelectedGroup(groupName) },
+                  label = { Text(groupName) })
+            }
+          }
     }
     // Peers display
     LazyColumn(
