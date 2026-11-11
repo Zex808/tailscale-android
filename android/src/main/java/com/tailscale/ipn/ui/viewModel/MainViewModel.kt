@@ -29,12 +29,15 @@ import com.tailscale.ipn.util.TSLog
 import java.time.Duration
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.FlowPreview
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.debounce
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 
 class MainViewModelFactory(private val appViewModel: AppViewModel) : ViewModelProvider.Factory {
   @Suppress("UNCHECKED_CAST")
@@ -87,7 +90,18 @@ class MainViewModel(private val appViewModel: AppViewModel) : IpnViewModel() {
 
   val isVpnActive: StateFlow<Boolean> = appViewModel.vpnActive
 
-  var searchJob: Job? = null
+  // Device groups for filtering
+  private val deviceGroupsViewModel = DeviceGroupsViewModel()
+  val groupMembers: StateFlow<Map<String, Set<String>>> = deviceGroupsViewModel.groupMembers
+
+  // The currently selected group filter (null = no filter, show all)
+  private val _selectedGroup = MutableStateFlow<String?>(null)
+  val selectedGroup: StateFlow<String?> = _selectedGroup
+
+  // Serialises peer recomputation. Netmap updates and search both mutate
+  // peerCategorizer and publish into _peers/_searchViewPeers; without this they can
+  // interleave and publish a list built from a half-replaced peer set.
+  private val peerUpdateMutex = Mutex()
 
   // Icon displayed in the button to present the health view
   val healthIcon: StateFlow<Int?> = MutableStateFlow(null)
@@ -143,37 +157,53 @@ class MainViewModel(private val appViewModel: AppViewModel) : IpnViewModel() {
           }
     }
     viewModelScope.launch {
-      _searchTerm.debounce(250L).collect { term ->
-        // run the search as a background task
-        searchJob?.cancel()
-        searchJob =
-            launch(Dispatchers.Default) {
-              val filteredPeers = peerCategorizer.groupedAndFilteredPeers(term)
-              _searchViewPeers.value = filteredPeers
-            }
+      // collectLatest cancels the previous term's work as soon as a newer term arrives.
+      // The old searchJob?.cancel() could not do this reliably: the filter body has no
+      // suspension points, so a cancelled job ran to completion anyway and still
+      // published its result.
+      _searchTerm.debounce(250L).collectLatest { term ->
+        withContext(Dispatchers.Default) {
+          peerUpdateMutex.withLock {
+            _searchViewPeers.value = peerCategorizer.groupedAndFilteredPeers(term)
+          }
+        }
       }
     }
     viewModelScope.launch {
-      Notifier.netmap.collect { it ->
-        it?.let { netmap ->
-          searchJob?.cancel()
-          launch(Dispatchers.Default) {
-            peerCategorizer.regenerateGroupedPeers(netmap)
-            val filteredPeers = peerCategorizer.groupedAndFilteredPeers(searchTerm.value)
-            _peers.value = peerCategorizer.peerSets
-            _searchViewPeers.value = filteredPeers
-          }
-          if (netmap.SelfNode.keyDoesNotExpire) {
-            showExpiry.set(false)
-            return@let
-          } else {
-            val expiryNotificationWindowMDM = MDMSettings.keyExpirationNotice.flow.value.value
-            val window =
-                expiryNotificationWindowMDM?.let { TimeUtil.duration(it) } ?: Duration.ofHours(24)
-            val expiresSoon =
-                TimeUtil.isWithinExpiryNotificationWindow(window, it.SelfNode.KeyExpiry ?: "")
-            showExpiry.set(expiresSoon)
-          }
+      combine(Notifier.netmap, _selectedGroup) { netmap, selectedGroup -> netmap to selectedGroup }
+          .collect { (netmap, selectedGroup) ->
+            if (netmap == null) return@collect
+
+            // Awaited rather than launched. The previous code launched this without keeping
+            // the Job, so two netmap updates arriving close together raced each other
+            // through PeerCategorizer. Notifier.netmap is a StateFlow, so suspending here
+            // just conflates intermediate netmaps instead of queueing them.
+            withContext(Dispatchers.Default) {
+              peerUpdateMutex.withLock {
+                peerCategorizer.regenerateGroupedPeers(netmap)
+                val allPeerSets = peerCategorizer.peerSets
+                val filteredSets =
+                    if (selectedGroup != null) {
+                      val groupMembers = groupMembers.value[selectedGroup] ?: emptySet()
+                      allPeerSets.map { peerSet ->
+                        peerSet.copy(peers = peerSet.peers.filter { it.StableID in groupMembers })
+                      }
+                    } else {
+                      allPeerSets
+                    }
+                _peers.value = filteredSets
+                _searchViewPeers.value = peerCategorizer.groupedAndFilteredPeers(_searchTerm.value)
+              }
+            }
+
+        if (netmap.SelfNode.keyDoesNotExpire) {
+          showExpiry.set(false)
+        } else {
+          val expiryNotificationWindowMDM = MDMSettings.keyExpirationNotice.flow.value.value
+          val window =
+              expiryNotificationWindowMDM?.let { TimeUtil.duration(it) } ?: Duration.ofHours(24)
+          showExpiry.set(
+              TimeUtil.isWithinExpiryNotificationWindow(window, netmap.SelfNode.KeyExpiry ?: ""))
         }
       }
     }
@@ -236,6 +266,10 @@ class MainViewModel(private val appViewModel: AppViewModel) : IpnViewModel() {
 
   fun disableSearchAutoFocus() {
     autoFocusSearch = false
+  }
+
+  fun setSelectedGroup(groupName: String?) {
+    _selectedGroup.value = groupName
   }
 
   fun setVpnPermissionLauncher(launcher: ActivityResultLauncher<Intent>) {
