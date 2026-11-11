@@ -40,8 +40,7 @@ class PeerCategorizerTest {
                           ID = 1L, DisplayName = "Tim", LoginName = "tim@example.com")),
           TKAEnabled = false)
 
-  private fun names(sets: List<PeerSet>) =
-      sets.flatMap { it.peers }.map { it.displayName }.sorted()
+  private fun names(sets: List<PeerSet>) = sets.flatMap { it.peers }.map { it.displayName }.sorted()
 
   @Test
   fun selfNodeIsListedWhenTailnetHasNoOtherPeers() {
@@ -80,7 +79,8 @@ class PeerCategorizerTest {
     val self = node("self", "my-phone")
     val categorizer = PeerCategorizer()
 
-    categorizer.regenerateGroupedPeers(netmap(self, listOf(node("a", "work-laptop", online = true))))
+    categorizer.regenerateGroupedPeers(
+        netmap(self, listOf(node("a", "work-laptop", online = true))))
     assertEquals(true, categorizer.groupedAndFilteredPeers("lap").single().peers.single().Online)
 
     categorizer.regenerateGroupedPeers(
@@ -120,8 +120,7 @@ class PeerCategorizerTest {
     categorizer.regenerateGroupedPeers(
         netmap(node("self", "my-phone"), listOf(node("a", "work-laptop"))))
 
-    assertEquals(
-        listOf("my-phone", "work-laptop"), names(categorizer.groupedAndFilteredPeers("")))
+    assertEquals(listOf("my-phone", "work-laptop"), names(categorizer.groupedAndFilteredPeers("")))
   }
 
   @Test
@@ -132,7 +131,6 @@ class PeerCategorizerTest {
             node("self", "my-phone"),
             listOf(node("a", "work-laptop", addresses = listOf("100.64.1.5/32")))))
 
-    assertEquals(
-        listOf("work-laptop"), names(categorizer.groupedAndFilteredPeers("100.64.1.5")))
+    assertEquals(listOf("work-laptop"), names(categorizer.groupedAndFilteredPeers("100.64.1.5")))
   }
 }
